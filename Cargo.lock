@@ -2943,6 +2943,8 @@ dependencies = [
  "linfa-linear",
  "rand 0.8.5",
  "solana-client",
+ "solana-sdk",
+ "tokio",
 ]
 
 [[package]]
