@@ -69,7 +69,7 @@ impl LinearRegression {
         self.intercept = y_mean - self.slope * x_mean;
     }
 
-    fn predict(&self, x: &[f64]) -> Vec<f64> {
-        x.iter().map(|&xi| self.slope * xi + self.intercept).collect()
-    }
+    // fn predict(&self, x: &[f64]) -> Vec<f64> {
+    //     x.iter().map(|&xi| self.slope * xi + self.intercept).collect()
+    // }
 }
