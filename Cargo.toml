@@ -2,5 +2,11 @@
 name = "rust-backend"
 version = "0.1.0"
 edition = "2021"
-
+respository = "https://github.com/Noban130/rust-backend"
 [dependencies]
+linfa = { version = "0.7", features = ["openblas-system"] }
+linfa-logistic = "0.7.0"
+ndarray = { version = "0.16.1", default-features = false }
+ndarray-csv = "0.5.2"
+csv = "1.1"
+plotlib = "0.5.1"
