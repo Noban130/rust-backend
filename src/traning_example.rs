@@ -42,3 +42,34 @@ for (i, result) in reader.records().enumerate() {
 
 Ok((x_values, y_values))
 }
+
+pub struct LinearRegression {
+    pub slope: f64,
+    pub intercept: f64,
+}
+
+impl LinearRegression {
+    pub fn new() -> Self {
+        LinearRegression {
+            slope: 0.0,
+            intercept: 0.0,
+        }
+    }
+
+    pub fn fit(&mut self, x: &[f64], y: &[f64]) {
+        let n = x.len() as f64;
+
+        let x_mean = x.iter().sum::<f64>() / n;
+        let y_mean = y.iter().sum::<f64>() / n;
+
+        let numerator = x.iter().zip(y.iter()).map(|(xi, yi)| (xi - x_mean) * (yi - y_mean)).sum::<f64>();
+        let denominator = x.iter().map(|xi| (xi - x_mean).powi(2)).sum::<f64>();
+
+        self.slope = numerator / denominator;
+        self.intercept = y_mean - self.slope * x_mean;
+    }
+
+    fn predict(&self, x: &[f64]) -> Vec<f64> {
+        x.iter().map(|&xi| self.slope * xi + self.intercept).collect()
+    }
+}

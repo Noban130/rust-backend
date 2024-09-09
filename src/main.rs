@@ -1,10 +1,6 @@
 use std::error::Error;
 pub mod traning_example;
 pub mod data_preprocess;
-use linfa::prelude::*;
-use linfa_linear::LinearRegression;
-use ndarray::{Array, Array1};
-use linfa::DatasetBase;
 // use std::env;
 // // pub mod sol_connect;
 // use std::iter::repeat_with;
@@ -31,20 +27,19 @@ fn main() -> Result<(), Box<dyn Error>>{
 
     for (i, (chunk_x, chunk_y)) in chunks.iter().enumerate() {
         println!("Chunk {}: x = {:?}, y = {:?}", i + 1, chunk_x, chunk_y);
-        // Convert x and y to ndarray arrays for linfa
-        let x_arr: Array1<f64> = Array::from_vec(chunk_x.clone());
-        let y_arr: Array1<f64> = Array::from_vec(chunk_y.clone());
-        let dataset = DatasetBase::new(x_arr, y_arr);
-        // Train linear regression model
-        let model = LinearRegression::default()
-            .fit(&dataset)
-            .expect("Failed to fit linear regression model");
+        let mut model = traning_example::LinearRegression::new();
 
-        // Extract and print model parameters
-        let intercept = model.intercept();
-        let coefficients = model.params();
+        // Ensure chunks are of sufficient size
+        if chunk_x.len() < 2 {
+            eprintln!("Chunk {} has too few data points for linear regression", i + 1);
+            continue;
+        }
 
-        println!("Chunk {}: slope = {}, intercept = {}", i + 1, coefficients[0], intercept);
+        // Train the model
+        model.fit(chunk_x, chunk_y);
+
+        // Print the model parameters
+        println!("Chunk {}: Slope = {:.4}, Intercept = {:.4}", i + 1, model.slope, model.intercept);
     }
     Ok(())
         
