@@ -39,8 +39,8 @@ for (i, result) in reader.records().enumerate() {
     }
 }
 
-println!("Parsed x values: {:?}", x_values);
-println!("Parsed y values: {:?}", y_values);
+// println!("Parsed x values: {:?}", x_values);
+// println!("Parsed y values: {:?}", y_values);
 
 Ok((x_values, y_values))
 }

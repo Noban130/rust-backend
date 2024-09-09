@@ -1,20 +1,33 @@
-use rand::Rng; // Add rand crate to your Cargo.toml
-use std::iter::repeat_with;
+use rand::seq::SliceRandom;
+use rand::Rng;
+// use std::error::Error;
 
-fn split_data_randomly<T>(data: &[T], min_chunk_size: usize, max_chunk_size: usize) -> Vec<Vec<T>>
-where
-    T: Clone,
-{
+pub fn split_data_randomly(
+    x: Vec<i64>, 
+    y: Vec<f64>, 
+    min_chunk_size: usize, 
+    max_chunk_size: usize
+) -> Vec<(Vec<i64>, Vec<f64>)> {
     let mut rng = rand::thread_rng();
+    
+    // Combine x and y into a tuple vector and shuffle
+    let mut data: Vec<(i64, f64)> = x.into_iter().zip(y.into_iter()).collect();
+    data.shuffle(&mut rng);
+    
     let mut chunks = Vec::new();
-    let mut start_index = 0;
+    let mut remaining_data = data;
 
-    while start_index < data.len() {
-        let remaining_len = data.len() - start_index;
-        let chunk_size = rng.gen_range(min_chunk_size..=remaining_len.min(max_chunk_size));
-        let end_index = start_index + chunk_size;
-        chunks.push(data[start_index..end_index].to_vec());
-        start_index = end_index;
+    while !remaining_data.is_empty() {
+        // Determine the size of the next chunk, bounded by the remaining data size
+        let chunk_size = rng.gen_range(min_chunk_size..=max_chunk_size)
+            .min(remaining_data.len());
+
+        // Split off a chunk of the data
+        let chunk: Vec<(i64, f64)> = remaining_data.drain(0..chunk_size).collect();
+
+        // Separate the chunk into x and y again
+        let (chunk_x, chunk_y): (Vec<i64>, Vec<f64>) = chunk.into_iter().unzip();
+        chunks.push((chunk_x, chunk_y));
     }
 
     chunks
