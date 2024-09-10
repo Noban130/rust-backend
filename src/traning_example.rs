@@ -13,7 +13,7 @@ let mut y_values = Vec::new();
 for (i, result) in reader.records().enumerate() {
     match result {
         Ok(record) => {
-            println!("Record {}: {:?}", i + 1, record);
+            // println!("Record {}: {:?}", i + 1, record);
             let x: f64 = match record[0].parse() {
                 Ok(val) => val,
                 Err(e) => {

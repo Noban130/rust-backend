@@ -1,77 +1,81 @@
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::signature::Keypair;
-use solana_sdk::transaction::Transaction;
-use solana_sdk::system_program;
-use solana_sdk::message::Message;
-use solana_sdk::system_instruction;
-use solana_sdk::signer::Signer;
-use solana_sdk::instruction::Instruction;
-use solana_sdk::instruction::AccountMeta;
-use bincode;
-// use std::error::Error;
+use solana_sdk::{
+    commitment_config::CommitmentConfig, pubkey::Pubkey, signature::{Keypair, Signer}, signer::EncodableKey, system_instruction, system_program, transaction::Transaction
+};
+use solana_program::instruction::Instruction;
+use borsh::{BorshSerialize, BorshDeserialize};
+use std::str::FromStr;
 
-pub async fn save_to_solana(model_params: &[f64]) -> Result<(), Box<dyn std::error::Error>> {
-    let client = RpcClient::new("https://rpc.ankr.com/solana_devnet".to_string());
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
+pub struct NewAccount {
+    pub slope: f64,
+    pub intercept: f64,
+}
+
+pub async fn save_data_to_solana(slope : f64, intercept : f64) -> Result<(), Box<dyn std::error::Error>> {
+    // Create an RPC client to interact with Solana devnet
+    let rpc_url = "https://api.devnet.solana.com";
+    let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
+    // Load your wallet keypair (ensure you have funds in the wallet for transaction fees)
+    let payer = Keypair::read_from_file("src/wallet-keypair.json")?;
     
-    // Create payer keypair
-    let payer = Keypair::new();
-
-    // Generate a keypair for the new account that will hold the data
-    let data_account = Keypair::new();
-
-    // Serialize the model_params using bincode
-    let serialized_data = bincode::serialize(&model_params)?;
-
-    // Calculate how much space we need for storing the f64 array
-    let space = serialized_data.len();
-
-    // Minimum balance required for rent exemption
+    // Program ID (replace with your deployed program's ID)
+    let program_id = Pubkey::from_str("GsX4b44N2vkDjnZPLucGV7ou5qxADN2N6BZ7zU8vnJ1X")?;
+    
+    // Create a new account for storing slope and intercept
+    let new_account = Keypair::new();
+    let space = 24; // Space for f64 (8 bytes for slope + 8 bytes for intercept)
+    
+    // Minimum balance for rent exemption
     let lamports = client.get_minimum_balance_for_rent_exemption(space)?;
-
-    // Create an account with enough space to hold the serialized data
-    let create_account_ix = system_instruction::create_account(
-        &payer.pubkey(),               // Funding account
-        &data_account.pubkey(),        // New account to hold data
-        lamports,                      // Amount of lamports to fund for rent exemption
-        space as u64,                  // Space in bytes needed to store the data
-        &system_program::ID,           // Owner of the account (can be your custom program)
+    
+    // Create an account initialization transaction
+    let create_account_instruction = system_instruction::create_account(
+        &payer.pubkey(),
+        &new_account.pubkey(),
+        lamports,
+        space as u64,
+        &program_id,
     );
+    println!("payer:{:?}", create_account_instruction);
 
-    // Build a transaction to create the account
-    let message = Message::new(&[create_account_ix], Some(&payer.pubkey()));
-    let mut transaction = Transaction::new_unsigned(message);
+    // Define the slope and intercept values
+    let slope: f64 = slope;
+    let intercept: f64 = intercept;
 
-    // Get recent blockhash
-    let blockhash = client.get_latest_blockhash()?;
+    // Serialize the data to be sent to the on-chain account
+    let new_account_data = NewAccount { slope, intercept };
+    let serialized_data = new_account_data.try_to_vec()?;
 
-    // Sign the transaction
-    transaction.sign(&[&payer, &data_account], blockhash);
-
-    // Send and confirm the transaction
-    client.send_and_confirm_transaction(&transaction)?;
-
-    // At this point, the new account has been created with space to store the model parameters
-    // Now, we'll write the serialized data into the account using a custom instruction
-    let write_data_instruction = Instruction::new_with_bincode(
-        system_program::ID, // This should be your custom program's ID
-        &serialized_data,   // Serialized data to write
-        vec![
-            AccountMeta::new(data_account.pubkey(), false),
-            AccountMeta::new(payer.pubkey(), true),
+    // Create the instruction to call the initialize method of the Solana program
+    let initialize_instruction = Instruction {
+        program_id,
+        accounts: vec![
+            solana_program::instruction::AccountMeta::new(new_account.pubkey(), false),
+            solana_program::instruction::AccountMeta::new(payer.pubkey(), true),
+            solana_program::instruction::AccountMeta::new_readonly(system_program::id(), false),
         ],
+        data: serialized_data,
+    };
+
+    // Create the transaction
+    let mut transaction = Transaction::new_with_payer(
+        &[create_account_instruction, initialize_instruction],
+        Some(&payer.pubkey()),
     );
 
-    // Build the message with the write instruction
-    let write_message = Message::new(&[write_data_instruction], Some(&payer.pubkey()));
-    let mut write_transaction = Transaction::new_unsigned(write_message);
-
-    // Sign the transaction
-    write_transaction.sign(&[&payer], blockhash);
+    // Get the recent blockhash
+    let recent_blockhash = match client.get_latest_blockhash() {
+        Ok(hash) => hash,
+        Err(_) => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to get latest blockhash"))),
+    };
+    println!("{:?}", recent_blockhash);
+    // Sign the transaction with the payer and new account
+    transaction.sign(&[&payer, &new_account], recent_blockhash);
 
     // Send and confirm the transaction
-    let signature = client.send_and_confirm_transaction(&write_transaction)?;
-
-    println!("Data stored in account: {}, Transaction signature: {}", data_account.pubkey(), signature);
+    let signature = client.send_and_confirm_transaction(&transaction)?;
+    println!("Transaction signature: {}", signature);
 
     Ok(())
 }
