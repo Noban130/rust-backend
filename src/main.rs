@@ -2,10 +2,10 @@ use std::error::Error;
 pub mod traning_example;
 pub mod data_preprocess;
 // use std::env;
-// // pub mod sol_connect;
+pub mod sol_connect;
 // use std::iter::repeat_with;
-// #[tokio::main]
-fn main() -> Result<(), Box<dyn Error>>{
+#[tokio::main]
+async  fn main() -> Result<(), Box<dyn Error>>{
     // let current_dir = env::current_dir()?;
     // println!("Current working directory: {:?}", current_dir);
     let (mut x_value, mut y_value): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
@@ -37,9 +37,10 @@ fn main() -> Result<(), Box<dyn Error>>{
 
         // Train the model
         model.fit(chunk_x, chunk_y);
-
         // Print the model parameters
         println!("Chunk {}: Slope = {:.4}, Intercept = {:.4}", i + 1, model.slope, model.intercept);
+
+        sol_connect::save_to_solana(&[model.slope, model.intercept]).await?;
     }
     Ok(())
         
