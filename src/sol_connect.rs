@@ -1,81 +1,132 @@
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    commitment_config::CommitmentConfig, pubkey::Pubkey, signature::{Keypair, Signer}, signer::EncodableKey, system_instruction, system_program, transaction::Transaction
+use anchor_client;
+#[allow(unused_imports)]
+pub use borsh::{BorshDeserialize, BorshSerialize};
+pub use solana_client::rpc_client::RpcClient;
+#[allow(unused_imports)]
+pub use solana_sdk::{
+    commitment_config::CommitmentConfig,
+    instruction::{AccountMeta, Instruction},
+    message::Message,
+    pubkey::Pubkey,
+    signature::Signature,
+    signature::{Keypair, Signer},
+    signer::EncodableKey,
+    system_program,
+    transaction::Transaction,
 };
-use solana_program::instruction::Instruction;
-use borsh::{BorshSerialize, BorshDeserialize};
 use std::str::FromStr;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct NewAccount {
-    pub slope: f64,
-    pub intercept: f64,
+/// Sign and submit a legacy transaction.
+///
+/// This method fully signs a transaction with all required signers, which
+/// must be present in the `keypairs` slice.
+///
+/// # Panics
+///
+/// Panics when signing or signature verification fails.
+///
+/// # Examples
+///
+/// This example uses the [`solana_program_client`] crate.
+///
+/// ```
+
+ #[derive(BorshSerialize, BorshDeserialize)]
+ #[borsh(crate = "borsh")]
+ pub struct NewAccount {
+     slope: f64,
+     intercept: f64
+ }
+
+pub fn save_data_to_solana(slope: f64, intercept: f64) {
+     // create a Rpc client connection
+     let url = "https://api.devnet.solana.com".to_string();
+     let connection = RpcClient::new(url);
+     let program_id = Pubkey::from_str("GsX4b44N2vkDjnZPLucGV7ou5qxADN2N6BZ7zU8vnJ1X").unwrap();
+    //  let seed = b"new_account";
+    // let (new_account, _) = Pubkey::find_program_address(&[seed], &program_id);
+    let account_new = Keypair::new().pubkey();
+     let payer = Keypair::read_from_file("src/wallet-keypair.json").unwrap();
+
+     let instruction_name = "initialize";
+    
+     //  construct instruction data
+     let instruction_data = NewAccount {
+        slope,
+        intercept ,
+     };
+
+     // setup signers
+     let signers = &[&payer];
+
+     // set up accounts
+     let accounts = vec![
+         AccountMeta::new(account_new, false),
+         AccountMeta::new(payer.pubkey(), true),
+     ];
+
+     // call signed call
+     let _tx_signature = signed_call(
+         &connection,
+         &program_id,
+         &payer,
+         signers,
+         instruction_name,
+         instruction_data,
+         accounts,
+     )
+     .unwrap();
+ }
+
+pub fn signed_call(
+    connection: &RpcClient,
+    program_id: &Pubkey,
+    payer: &Keypair,
+    signers: &[&Keypair],
+    instruction_name: &str,
+    instruction_data: NewAccount,
+    accounts: Vec<AccountMeta>,
+) -> Result<Signature, Box<dyn std::error::Error>>
+
+{
+    // get discriminant
+    let instruction_discriminant = get_discriminant("global", instruction_name);
+
+    // construct instruction
+    let ix = Instruction::new_with_borsh(
+        program_id.clone(),
+        &(instruction_discriminant, instruction_data),
+        accounts.clone(),
+    );
+
+    // get latest block hash
+    let blockhash = connection.get_latest_blockhash()?;
+
+    // construct message
+    let msg = Message::new_with_blockhash(&[ix], Some(&payer.pubkey()), &blockhash);
+
+    //construct transaction
+    let mut tx = Transaction::new_unsigned(msg);
+
+    // sign transaction
+    tx.sign(signers, tx.message.recent_blockhash);
+
+    // send and confirm transaction
+    let tx_signature = connection.send_and_confirm_transaction(&tx)?;
+
+    Ok(tx_signature)
 }
 
-pub async fn save_data_to_solana(slope : f64, intercept : f64) -> Result<(), Box<dyn std::error::Error>> {
-    // Create an RPC client to interact with Solana devnet
-    let rpc_url = "https://api.devnet.solana.com";
-    let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
-    // Load your wallet keypair (ensure you have funds in the wallet for transaction fees)
-    let payer = Keypair::read_from_file("src/wallet-keypair.json")?;
-    
-    // Program ID (replace with your deployed program's ID)
-    let program_id = Pubkey::from_str("GsX4b44N2vkDjnZPLucGV7ou5qxADN2N6BZ7zU8vnJ1X")?;
-    
-    // Create a new account for storing slope and intercept
-    let new_account = Keypair::new();
-    let space = 24; // Space for f64 (8 bytes for slope + 8 bytes for intercept)
-    
-    // Minimum balance for rent exemption
-    let lamports = client.get_minimum_balance_for_rent_exemption(space)?;
-    
-    // Create an account initialization transaction
-    let create_account_instruction = system_instruction::create_account(
-        &payer.pubkey(),
-        &new_account.pubkey(),
-        lamports,
-        space as u64,
-        &program_id,
+/// returns function signature
+///
+/// accepts name space and name function
+pub fn get_discriminant(namespace: &str, name: &str) -> [u8; 8] {
+    let preimage = format!("{}:{}", namespace, name);
+
+    let mut sighash = [0u8; 8];
+    sighash.copy_from_slice(
+        &anchor_client::anchor_lang::solana_program::hash::hash(preimage.as_bytes()).to_bytes()
+            [..8],
     );
-    println!("payer:{:?}", create_account_instruction);
-
-    // Define the slope and intercept values
-    let slope: f64 = slope;
-    let intercept: f64 = intercept;
-
-    // Serialize the data to be sent to the on-chain account
-    let new_account_data = NewAccount { slope, intercept };
-    let serialized_data = new_account_data.try_to_vec()?;
-
-    // Create the instruction to call the initialize method of the Solana program
-    let initialize_instruction = Instruction {
-        program_id,
-        accounts: vec![
-            solana_program::instruction::AccountMeta::new(new_account.pubkey(), false),
-            solana_program::instruction::AccountMeta::new(payer.pubkey(), true),
-            solana_program::instruction::AccountMeta::new_readonly(system_program::id(), false),
-        ],
-        data: serialized_data,
-    };
-
-    // Create the transaction
-    let mut transaction = Transaction::new_with_payer(
-        &[create_account_instruction, initialize_instruction],
-        Some(&payer.pubkey()),
-    );
-
-    // Get the recent blockhash
-    let recent_blockhash = match client.get_latest_blockhash() {
-        Ok(hash) => hash,
-        Err(_) => return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to get latest blockhash"))),
-    };
-    println!("{:?}", recent_blockhash);
-    // Sign the transaction with the payer and new account
-    transaction.sign(&[&payer, &new_account], recent_blockhash);
-
-    // Send and confirm the transaction
-    let signature = client.send_and_confirm_transaction(&transaction)?;
-    println!("Transaction signature: {}", signature);
-
-    Ok(())
+    sighash
 }
