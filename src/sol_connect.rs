@@ -38,18 +38,30 @@ use std::str::FromStr;
      intercept: f64
  }
 
-pub fn save_data_to_solana(slope: f64, intercept: f64) {
+pub fn save_data_to_solana(slope: f64, intercept: f64, transaction_num: usize) {
      // create a Rpc client connection
      let url = "https://api.devnet.solana.com".to_string();
-     let connection = RpcClient::new(url);
+     let timeout = std::time::Duration::from_secs(50);
+     let connection = RpcClient::new_with_timeout(url, timeout);
      let program_id = Pubkey::from_str("GsX4b44N2vkDjnZPLucGV7ou5qxADN2N6BZ7zU8vnJ1X").unwrap();
-    //  let seed = b"new_account";
-    // let (new_account, _) = Pubkey::find_program_address(&[seed], &program_id);
-    let account_new = Keypair::new().pubkey();
+     // let account_new = Keypair::new().pubkey();
      let payer = Keypair::read_from_file("src/wallet-keypair.json").unwrap();
-
-     let instruction_name = "initialize";
-    
+    //  let mut seed_text = if transaction_num == 0 {
+    //     b"new_init_seed"[..12].to_vec()
+    // } else {
+    //     b"save_added_seed"[..15].to_vec()
+    // };
+    let seed_text = b"new_init_seed3";
+    // Convert string to &[u8]
+    let seed_text_slice: &[u8] = seed_text;
+    let (account_new, _) = Pubkey::find_program_address(&[&seed_text_slice,&payer.pubkey().to_bytes()], &program_id);
+    //  let instruction_name = "initialize";
+    let instruction_name = if transaction_num == 0 {
+        "initialize"
+    } else {
+        "save_data"
+    };
+    println!("transaction_num:{}, instruction_name:{}", transaction_num, instruction_name);
      //  construct instruction data
      let instruction_data = NewAccount {
         slope,
@@ -58,13 +70,14 @@ pub fn save_data_to_solana(slope: f64, intercept: f64) {
 
      // setup signers
      let signers = &[&payer];
-
      // set up accounts
      let accounts = vec![
          AccountMeta::new(account_new, false),
-         AccountMeta::new(payer.pubkey(), true),
-     ];
-
+         AccountMeta::new_readonly(payer.pubkey(), true),
+         AccountMeta::new_readonly(system_program::ID, false),
+         ];
+         
+         println!("{:?}", accounts);
      // call signed call
      let _tx_signature = signed_call(
          &connection,
@@ -100,7 +113,7 @@ pub fn signed_call(
     );
 
     // get latest block hash
-    let blockhash = connection.get_latest_blockhash()?;
+    let blockhash = connection.get_latest_blockhash().unwrap();
 
     // construct message
     let msg = Message::new_with_blockhash(&[ix], Some(&payer.pubkey()), &blockhash);
@@ -112,7 +125,12 @@ pub fn signed_call(
     tx.sign(signers, tx.message.recent_blockhash);
 
     // send and confirm transaction
-    let tx_signature = connection.send_and_confirm_transaction(&tx)?;
+    let tx_signature = connection
+    .send_and_confirm_transaction_with_spinner(&tx)
+    .map_err(|err| {
+        println!("{:?}", err);
+        }).unwrap();
+    println!("Program uploaded successfully. Transaction ID: {}", tx_signature);
 
     Ok(tx_signature)
 }
@@ -128,5 +146,7 @@ pub fn get_discriminant(namespace: &str, name: &str) -> [u8; 8] {
         &anchor_client::anchor_lang::solana_program::hash::hash(preimage.as_bytes()).to_bytes()
             [..8],
     );
+    
+    // println!("signature-hash:{:?}", sighash);
     sighash
 }

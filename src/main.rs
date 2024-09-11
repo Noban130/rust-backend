@@ -40,7 +40,7 @@ async  fn main() -> Result<(), Box<dyn Error>>{
         // Print the model parameters
         println!("Chunk {}: Slope = {:.4}, Intercept = {:.4}", i + 1, model.slope, model.intercept);
 
-        sol_connect::save_data_to_solana(model.slope, model.intercept);
+        sol_connect::save_data_to_solana(model.slope, model.intercept, i);
     }
     Ok(())
         
