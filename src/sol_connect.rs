@@ -38,7 +38,7 @@ use std::str::FromStr;
      intercept: f64
  }
 
-pub fn save_data_to_solana(slope: f64, intercept: f64, transaction_num: usize) {
+pub fn save_data_to_solana(slope: f64, intercept: f64) {
      // create a Rpc client connection
      let url = "https://api.devnet.solana.com".to_string();
      let timeout = std::time::Duration::from_secs(50);
@@ -51,17 +51,32 @@ pub fn save_data_to_solana(slope: f64, intercept: f64, transaction_num: usize) {
     // } else {
     //     b"save_added_seed"[..15].to_vec()
     // };
-    let seed_text = b"new_init_seed3";
+    let seed_text = b"new_init_seed4";
     // Convert string to &[u8]
     let seed_text_slice: &[u8] = seed_text;
     let (account_new, _) = Pubkey::find_program_address(&[&seed_text_slice,&payer.pubkey().to_bytes()], &program_id);
     //  let instruction_name = "initialize";
-    let instruction_name = if transaction_num == 0 {
-        "initialize"
-    } else {
-        "save_data"
-    };
-    println!("transaction_num:{}, instruction_name:{}", transaction_num, instruction_name);
+    // Check if the PDA account exists
+    let mut instruction_name = "initialize";
+    match connection.get_account(&account_new) {
+        Ok(account) => {
+            println!("PDA account exists!");
+
+            // Deserialize the data if needed
+            // Assuming you have a struct for the account data
+            if account.data.len() > 0 {
+                println!("PDA account is initialized!");
+                // You can deserialize the account data here to check its state
+                instruction_name = "save_data"
+            } else {
+                println!("PDA account exists but is not initialized.");
+            }
+        }
+        Err(_) => {
+            println!("PDA account does not exist or is not initialized.");
+        }
+    }
+    println!("instruction_name:{}", instruction_name);
      //  construct instruction data
      let instruction_data = NewAccount {
         slope,
